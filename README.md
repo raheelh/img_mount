@@ -4,14 +4,13 @@ This folder contains PowerShell helpers to mount, unmount, and convert raw disk 
 
 Files:
 
-- `mount-image.ps1`: Mount a partitioned raw `.img` using ImDisk Toolkit's `mountimg.exe` so each Windows-compatible partition appears with a drive letter.
-- `unmount-image.ps1`: Unmount images or remove specific drive letters (uses `mountimg.exe` or `imdisk.exe` when available).
+- `mount-image.ps1`: Convert a raw `.img` to VHDX and mount it using native Windows tooling.
+- `unmount-image.ps1`: Unmount VHDX/DiskImage files or remove assigned drive letters using native Windows PowerShell commands.
 - `convert-to-vhdx.ps1`: Convert raw `.img` to `.vhdx` using `qemu-img`.
 
 Prerequisites
 
-- Administrator privileges for mounting/unmounting and driver operations.
-- ImDisk Toolkit (for mounting): https://sourceforge.net/projects/imdisk-toolkit/ (provides `mountimg.exe` and `imdisk.exe`).
+- Administrator privileges for mounting/unmounting and using PowerShell storage cmdlets.
 - `qemu-img` (for converting to VHDX). Install via Chocolatey (`choco install qemu`) or download from the official qemu builds.
 
 Mounting an image
@@ -20,29 +19,29 @@ Native (recommended, no kernel third-party driver): convert to VHDX and mount
 
 ```powershell
 # Convert and mount using the helper (requires qemu-img and Mount-VHD/Mount-DiskImage)
-.\mount-image.ps1 -ImagePath C:\path\to\disk.img -Native
+.\mount-image.ps1 -ImagePath C:\path\to\disk.img
 
 # Optionally provide an output VHDX path to keep the converted file
-.\mount-image.ps1 -ImagePath C:\path\to\disk.img -Native -OutputVhdPath C:\images\disk.vhdx
+.\mount-image.ps1 -ImagePath C:\path\to\disk.img -OutputVhdPath C:\images\disk.vhdx
 ```
 
 After running, Windows should show drive letters for partitions that have supported filesystems (NTFS/FAT/etc.). If you don't see drive letters, open Disk Management and ensure the virtual disk and partitions are online and have drive letters assigned.
 
 Unmounting an image
 
-The `unmount-image.ps1` helper supports two modes:
+The `unmount-image.ps1` helper supports native dismounting:
 
-- By image path (preferred): `-ImagePath` — the script tries `mountimg.exe -d <image>` to unmount the image.
-- By drive letters: `-DriveLetters` — supply one or more drive letters to remove (e.g. `E`,`F`) and the script will call `imdisk.exe -D -m X:` when available.
+- `-VhdPath`: Dismount the attached VHDX or disk image using `Dismount-VHD` or `Dismount-DiskImage`.
+- `-DriveLetters`: Remove one or more drive letters from mounted volumes when needed.
 
 Examples:
 
 ```powershell
-.\unmount-image.ps1 -ImagePath C:\path\to\disk.img
+.\unmount-image.ps1 -VhdPath C:\path\to\disk.vhdx
 .\unmount-image.ps1 -DriveLetters E,F
 ```
 
-If the helper cannot find `mountimg.exe` or `imdisk.exe`, it prints manual commands you can run (for example: `imdisk -D -m E:` or `mountimg.exe -d "C:\path\to\image.img"`).
+If the helper cannot perform the action automatically, use Disk Management or the native PowerShell dismount commands shown above.
 
 Converting raw `.img` to VHDX
 
@@ -63,14 +62,14 @@ After conversion you can attach the resulting `.vhdx` natively in Windows (right
 
 Security and notes
 
-- Installing ImDisk Toolkit adds a kernel-mode driver; only install trusted builds in secure environments.
+- Using native VHD mounting avoids third-party kernel-mode drivers.
 - Converting large images may take significant disk space and time; ensure you have enough free space for the target `.vhdx`.
 - If you prefer a solution without third-party drivers, convert to VHDX and use Windows' native VHD mounting (`Mount-VHD`) instead.
 
 Next improvements
 
 - Auto-detect and print the drive letters created when mounting.
-- Add an `UnmountAllImDisk` helper that safely removes all ImDisk-mounted drives after confirming backing files.
+- Add an `UnmountAllMountedVHD` helper that safely removes attached VHDs after confirming backing files.
 
 Creating a raw image on Linux
 

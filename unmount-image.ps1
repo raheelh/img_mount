@@ -1,107 +1,77 @@
-<#
+﻿<#
 .SYNOPSIS
-  Unmount a previously mounted raw image (ImDisk) by image path or drive letters.
+  Unmount a mounted VHDX or attached disk image using native Windows PowerShell.
 
 .DESCRIPTION
-  Attempts to unmount a raw image mounted via ImDisk Toolkit. Prefer passing
-  `-ImagePath` (will try `mountimg.exe -d <image>`). You can also provide one
-  or more `-DriveLetters` (e.g. 'E','F') to remove specific mounts via
-  `imdisk.exe` if available.
-
-.PARAMETER ImagePath
-  Path to the image file that was mounted.
+  This script removes drive letters from mounted partitions or dismounts an attached VHDX/disk image.
+  It uses built-in `Dismount-VHD` / `Dismount-DiskImage` and native partition access path removal.
 
 .PARAMETER DriveLetters
-  One or more drive letters to unmount (letters only or with colon).
+  One or more drive letters to remove (letters only or with colon).
+
+.PARAMETER VhdPath
+  Path to the attached VHDX or disk image to dismount.
 
 .EXAMPLE
-  .\unmount-image.ps1 -DriveLetters E, F
-  .\unmount-image.ps1 -ImagePath C:\images\disk.img
+  .\unmount-image.ps1 -VhdPath C:\images\disk.vhdx
+  .\unmount-image.ps1 -DriveLetters E,F
 #>
 
 [CmdletBinding()]
 param(
-	[string]$ImagePath,
-	[string[]]$DriveLetters
-)
-
-function Test-Admin {
-	$current = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
-	return $current.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-}
-
-if (-not (Test-Admin)) {
-	Write-Output "Administrator privileges required. Re-launching as admin..."
-	Start-Process -FilePath pwsh -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
-	exit
-}
-
-# Locate helpers
-$mountimg = Get-Command mountimg.exe -ErrorAction SilentlyContinue
-if (-not $mountimg) {
-	$possible = @("$env:ProgramFiles\ImDisk\mountimg.exe", "$env:ProgramFiles(x86)\ImDisk\mountimg.exe", "$env:ProgramFiles\ImDisk Toolkit\mountimg.exe", "$env:ProgramFiles(x86)\ImDisk Toolkit\mountimg.exe")
-	foreach ($p in $possible) { if (Test-Path $p) { $mountimg = Get-Item $p; break } }
-}
-
-$imdisk = Get-Command imdisk.exe -ErrorAction SilentlyContinue
-if (-not $imdisk) {
-	$possible2 = @("$env:ProgramFiles\ImDisk\imdisk.exe", "$env:ProgramFiles(x86)\ImDisk\imdisk.exe", "$env:ProgramFiles\ImDisk Toolkit\imdisk.exe", "$env:ProgramFiles(x86)\ImDisk Toolkit\imdisk.exe")
-	foreach ($p in $possible2) { if (Test-Path $p) { $imdisk = Get-Item $p; break } }
-}
-
-$didAnything = $false
-
-if ($ImagePath) {
-	if ($mountimg) {
-		Write-Output "Attempting to unmount image using mountimg: $ImagePath"
-		try {
-			$proc = Start-Process -FilePath $mountimg.Path -ArgumentList '-d', '"' + $ImagePath + '"' -Wait -PassThru -WindowStyle Hidden
-			if ($proc.ExitCode -eq 0) { Write-Output "Unmounted image: $ImagePath"; $didAnything = $true }
-			else { Write-Warning "mountimg returned code $($proc.ExitCode)." }
-		} catch {
-			Write-Warning "Failed to run mountimg: $_"
-		}
-	} else {
-		Write-Warning "mountimg.exe not found; cannot unmount by image path."
-	}
-}
-
-if ($DriveLetters) {
-	if (-not $imdisk) {
-		Write-Warning "imdisk.exe not found; cannot unmount by drive letter via imdisk."
-	} else {
-		foreach ($d in $DriveLetters) {
-			$letter = $d -replace ':',''
-			Write-Output "Attempting to remove drive $letter via imdisk"
-			try {
-				$proc = Start-Process -FilePath $imdisk.Path -ArgumentList '-D', '-m', "$letter:`" -Wait -PassThru -WindowStyle Hidden
-			} catch {
-				# older imdisk uses syntax: imdisk -D -m X:\n+                $proc = Start-Process -FilePath $imdisk.Path -ArgumentList "-D -m $letter:`" -Wait -PassThru -WindowStyle Hidden
-			}
-			if ($proc -and $proc.ExitCode -eq 0) { Write-Output "Removed $letter:"; $didAnything = $true } else { Write-Warning "Failed to remove $letter (exit: $($proc.ExitCode))." }
-		}
-	}
-}
-
-if (-not $didAnything) {
-	Write-Output "No automatic unmount performed. To unmount manually, open Disk Management or run the appropriate ImDisk commands."
-	if ($imdisk) { Write-Output "Example: imdisk -D -m E:" }
-	if ($mountimg) { Write-Output "Example: mountimg.exe -d \"C:\path\to\image.img\"" }
-}
-# Support native VHDX dismounting if requested
-param(
-    [string]$ImagePath,
     [string[]]$DriveLetters,
     [string]$VhdPath
 )
 
+function Test-Admin {
+    $current = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+    return $current.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+if (-not (Test-Admin)) {
+    Write-Output "Administrator privileges required. Re-launching as admin..."
+    Start-Process -FilePath pwsh -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+    exit
+}
+
+$didAnything = $false
+
 if ($VhdPath) {
     if (Get-Command Dismount-VHD -ErrorAction SilentlyContinue) {
-        try { Dismount-VHD -Path $VhdPath -Force; Write-Output "Dismounted VHD: $VhdPath"; $didAnything = $true } catch { Write-Warning "Failed to dismount VHD: $_" }
+        try {
+            Dismount-VHD -Path $VhdPath -Force
+            Write-Output "Dismounted VHD: $VhdPath"
+            $didAnything = $true
+        } catch {
+            Write-Warning "Failed to dismount VHD: $_"
+        }
     } else {
-        try { Dismount-DiskImage -ImagePath $VhdPath; Write-Output "Dismounted DiskImage: $VhdPath"; $didAnything = $true } catch { Write-Warning "Failed to dismount DiskImage: $_" }
+        try {
+            Dismount-DiskImage -ImagePath $VhdPath
+            Write-Output "Dismounted DiskImage: $VhdPath"
+            $didAnything = $true
+        } catch {
+            Write-Warning "Failed to dismount DiskImage: $_"
+        }
     }
 }
 
-if ($didAnything) { Write-Output "Unmount actions completed." }
-else { Write-Output "No VHDs or imdisk mounts were removed by this command." }
+if ($DriveLetters) {
+    foreach ($d in $DriveLetters) {
+        $letter = ($d -replace ':','').ToUpper()
+        try {
+            $partition = Get-Partition -DriveLetter $letter -ErrorAction Stop
+            Remove-PartitionAccessPath -DiskNumber $partition.DiskNumber -PartitionNumber $partition.PartitionNumber -AccessPath "$letter:`\" -ErrorAction Stop
+            Write-Output "Removed drive letter $letter:`\"
+            $didAnything = $true
+        } catch {
+            Write-Warning "Failed to remove drive letter $letter: $_"
+        }
+    }
+}
+
+if (-not $didAnything) {
+    Write-Output "No automatic unmount performed. Use Disk Management, Dismount-VHD, or Dismount-DiskImage instead."
+    Write-Output "Example: Dismount-VHD -Path C:\path\to\image.vhdx"
+    Write-Output "Example: Dismount-DiskImage -ImagePath C:\path\to\image.vhdx"
+}

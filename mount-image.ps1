@@ -3,14 +3,11 @@
   Mount a raw disk image (.img) on Windows by converting to VHDX and using native Windows mounting.
 
 .DESCRIPTION
-  This script converts a raw disk image to VHDX (using qemu-img) and mounts it read-only with Windows' built-in storage tooling.
-  It does not require ImDisk Toolkit.
+  This script converts a raw disk image to VHDX using `qemu-img` and mounts it read-only with native Windows storage tooling.
+  It is a native VHDX-based workflow without third-party driver dependencies.
 
 .PARAMETER ImagePath
   Path to the .img file to mount.
-
-.PARAMETER Native
-  Use the native conversion and mounting path.
 
 .PARAMETER OutputVhdPath
   Optional output path for the generated VHDX file.
@@ -24,7 +21,6 @@ param(
     [Parameter(Mandatory=$true, Position=0)]
     [string]$ImagePath,
 
-    [switch]$Native,
     [string]$OutputVhdPath
 )
 
